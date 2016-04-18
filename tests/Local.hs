@@ -12,8 +12,8 @@ import           Test.Tasty             (TestTree, defaultMain, testGroup)
 import qualified Test.Tasty.HUnit       as HU
 import           Test.Tasty.QuickCheck  (testProperty)
 
-import           Data.JsonSchema.Draft4 (Failure(..), Schema(..),
-                                         SchemaCache(..), SchemaContext(..),
+import           Data.JsonSchema.Draft4 (Failure(..), ReferencedSchemas(..),
+                                         Schema(..), SchemaWithURI(..),
                                          emptySchema, runValidate)
 import qualified Data.Validator.Draft4  as VA
 import           Shared                 (isLocal, readSchemaTests, toTest)
@@ -44,17 +44,18 @@ itemsObject = HU.assertEqual "Path to invalid data"
                              (P.Pointer [P.Token "0"])
                              (_failureOffendingData failure)
   where
-    [failure] = runValidate (SchemaCache schema mempty) sc (toJSON [[True, True]])
+    [failure] = runValidate (ReferencedSchemas schema mempty)
+                            sw (toJSON [[True, True]])
 
     schema :: Schema
     schema = emptySchema
       { _schemaItems = Just (VA.ItemsObject (emptySchema { _schemaUniqueItems = Just True }))
       }
 
-    sc :: SchemaContext Schema
-    sc = SchemaContext
-      { _scURI    = Nothing
-      , _scSchema = schema
+    sw :: SchemaWithURI Schema
+    sw = SchemaWithURI
+      { _swSchema = schema
+      , _swURI    = Nothing
       }
 
 itemsArray :: IO ()
@@ -62,15 +63,16 @@ itemsArray = HU.assertEqual "Path to invalid data"
                             (P.Pointer [P.Token "0"])
                             (_failureOffendingData failure)
   where
-    [failure] = runValidate (SchemaCache schema mempty) sc (toJSON [[True, True]])
+    [failure] = runValidate (ReferencedSchemas schema mempty)
+                            sw (toJSON [[True, True]])
 
     schema :: Schema
     schema = emptySchema
       { _schemaItems = Just (VA.ItemsArray [emptySchema { _schemaUniqueItems = Just True }])
       }
 
-    sc :: SchemaContext Schema
-    sc = SchemaContext
-      { _scURI    = Nothing
-      , _scSchema = schema
+    sw :: SchemaWithURI Schema
+    sw = SchemaWithURI
+      { _swSchema = schema
+      , _swURI    = Nothing
       }

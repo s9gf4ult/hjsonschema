@@ -7,8 +7,8 @@ module Data.JsonSchema.Draft4
   , checkSchema
 
     -- * Fetching tools
-  , SchemaContext(..)
-  , SchemaCache(..)
+  , SchemaWithURI(..)
+  , ReferencedSchemas(..)
   , fetchReferencedSchemas
 
     -- * Failure
@@ -29,42 +29,37 @@ import           Data.Maybe                      (fromMaybe)
 import           Data.JsonSchema.Draft4.Failure
 import qualified Data.JsonSchema.Draft4.Internal as IN
 import           Data.JsonSchema.Draft4.Schema
-import           Data.JsonSchema.Fetch           (SchemaCache(..),
-                                                  SchemaContext(..),
-                                                  URISchemaMap)
+import           Data.JsonSchema.Fetch           (ReferencedSchemas(..),
+                                                  SchemaWithURI(..), Spec(..))
 import qualified Data.JsonSchema.Fetch           as FE
-import           Data.Validator.Reference        (baseAndFragment)
 import           Import
 
 -- | Check the validity of a schema and return a function to validate data.
 checkSchema
-  :: SchemaCache Schema
-  -> SchemaContext Schema
+  :: ReferencedSchemas Schema
+  -> SchemaWithURI Schema
   -> Either [Failure] (Value -> [Failure])
-checkSchema sg sc =
-  case schemaValidity (_scSchema sc) of
-    [] -> Right (IN.runValidate sg sc)
-    es -> Left es
+checkSchema referenced schemaWithURI =
+  case schemaValidity (_swSchema schemaWithURI) of
+    []       -> Right (IN.runValidate referenced schemaWithURI)
+    failures -> Left failures
 
 fetchReferencedSchemas
-  :: URISchemaMap Schema
-  -> SchemaContext Schema
-  -> IO (Either Text (SchemaCache Schema))
+  :: SchemaWithURI Schema
+  -> IO (Either Text (ReferencedSchemas Schema))
 fetchReferencedSchemas =
-  FE.fetchReferencedSchemas IN.embedded _schemaId _schemaRef
+  FE.fetchReferencedSchemas (Spec IN.embedded _schemaId _schemaRef)
 
 -- | In normal situations just use 'checkSchema', which is a combination of
 -- 'schemaValidity' and 'runValidate'.
 schemaValidity :: Schema -> [Failure]
-schemaValidity = IN.runValidate cache (SchemaContext Nothing d4) . toJSON
+schemaValidity = IN.runValidate referenced (SchemaWithURI d4 Nothing) . toJSON
   where
     d4 :: Schema
     d4 = fromMaybe (error "Schema decode failed (this should never happen)")
        . decode . LBS.fromStrict $ $(embedFile "draft4.json")
 
-    -- @fst . baseAndFragment@ is necessary to remove the trailing "#",
-    -- otherwise cache lookups to resolve internal references will fail.
-    cache :: SchemaCache Schema
-    cache = SchemaCache d4 $ case _schemaId d4 >>= fst . baseAndFragment of
-                               Nothing  -> mempty
-                               Just uri -> H.singleton uri d4
+    referenced :: ReferencedSchemas Schema
+    referenced = ReferencedSchemas
+                   d4
+                   (H.singleton "http://json-schema.org/draft-04/schema" d4)

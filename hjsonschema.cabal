@@ -119,7 +119,6 @@ test-suite example
                       , tasty
                       , tasty-hunit
                       , text
-                      , unordered-containers
                       , vector
 
 source-repository head
