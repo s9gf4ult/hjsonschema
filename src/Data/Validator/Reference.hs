@@ -12,16 +12,15 @@ type URIBase = Maybe Text
 type URIBaseAndFragment = (Maybe Text, Maybe Text)
 
 newResolutionScope :: URIBase -> Maybe Text -> URIBase
-newResolutionScope mScope idKeyword =
-  case idKeyword of
-    Just t -> fst . baseAndFragment $ resolveScopeAgainst mScope t
-    _      -> mScope
+newResolutionScope mScope idKeyword
+  | Just t <- idKeyword = fst . baseAndFragment $ resolveScopeAgainst mScope t
+  | otherwise           = mScope
 
 resolveReference :: URIBase -> Text -> URIBaseAndFragment
 resolveReference mScope t = baseAndFragment $ resolveScopeAgainst mScope t
 
 isRemoteReference :: Text -> Bool
-isRemoteReference uri = "://" `T.isInfixOf` uri
+isRemoteReference = T.isInfixOf "://"
 
 resolveFragment
   :: (FromJSON schema, ToJSON schema, Show schema)

@@ -43,7 +43,7 @@ example = do
   where
     makeCache :: IO (D4.ReferencedSchemas D4.Schema)
     makeCache = do
-      res <- D4.fetchReferencedSchemas schemaContext
+      res <- D4.referencesViaHTTP schemaContext
       case res of
         Left _      -> error "Couldn't fetch referenced schemas."
         Right cache -> return cache

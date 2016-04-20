@@ -2,19 +2,24 @@
 
 module Data.JsonSchema.Fetch where
 
-import           Control.Exception        (SomeException(..), catch)
+import           Control.Arrow            (left)
+import           Control.Exception        (catch)
 import qualified Data.ByteString.Lazy     as LBS
+import qualified Data.ByteString          as BS
 import qualified Data.HashMap.Strict      as H
 import qualified Data.Text                as T
 import           Network.HTTP.Client
 
-import           Data.Validator.Reference (isRemoteReference,
-                                           newResolutionScope,
+import           Data.Validator.Reference (newResolutionScope,
                                            resolveReference)
 import           Import
 
 -- For GHCs before 7.10:
 import           Prelude                  hiding (concat, sequence)
+
+--------------------------------------------------
+-- * Types
+--------------------------------------------------
 
 data Spec schema = Spec
   { _ssEmbedded :: schema -> [schema]
@@ -44,79 +49,123 @@ data ReferencedSchemas schema = ReferencedSchemas
   , _rsSchemaMap :: !(URISchemaMap schema)
   } deriving (Eq, Show)
 
+--------------------------------------------------
+-- * Fetch via HTTP
+--------------------------------------------------
+
+data HTTPFailure
+  = HTTPParseFailure Text
+  | RequestFailure HttpException
+  deriving Show
+
 -- | Take a schema. Retrieve every document either it or its subschemas
 -- include via the "$ref" keyword.
-fetchReferencedSchemas
+referencesViaHTTP'
   :: forall schema. FromJSON schema
   => Spec schema
   -> SchemaWithURI schema
-  -> IO (Either Text (ReferencedSchemas schema))
-fetchReferencedSchemas spec sw = do
+  -> IO (Either HTTPFailure (ReferencedSchemas schema))
+referencesViaHTTP' spec sw = do
   manager <- newManager defaultManagerSettings
-  let f = fetchReferencedSchemas' spec (simpleGET manager) sw
-  catch (Right <$> f) handler
+  let f = referencesMethodAgnostic (get manager) spec sw
+  catch (left HTTPParseFailure <$> f) handler
   where
-    handler :: SomeException -> IO (Either Text (ReferencedSchemas schema))
-    handler e = pure . Left . T.pack . show $ e
+    get :: Manager -> Text -> IO LBS.ByteString
+    get man url = do
+      request <- parseUrl (T.unpack url)
+      responseBody <$> httpLbs request man
 
--- | Based on 'Network.Http.Conduit.simpleHttp' from http-conduit.
-simpleGET :: Manager -> Text -> IO LBS.ByteString
-simpleGET man url = do
-  req <- parseUrl (T.unpack url)
-  responseBody <$> httpLbs req { requestHeaders = ("Connection", "close")
-                               : requestHeaders req
-                               } man
+    handler
+      :: HttpException
+      -> IO (Either HTTPFailure (ReferencedSchemas schema))
+    handler = pure . Left . RequestFailure
 
-fetchReferencedSchemas'
+--------------------------------------------------
+-- * Fetch via Filesystem
+--------------------------------------------------
+
+data FilesystemFailure
+  = FSParseFailure Text
+  | ReadFailure IOError
+  deriving Show
+
+referencesViaFilesystem'
   :: forall schema. FromJSON schema
   => Spec schema
-  -> (Text -> IO LBS.ByteString)
   -> SchemaWithURI schema
-  -> IO (ReferencedSchemas schema)
-fetchReferencedSchemas' spec fetchRef sw =
-  ReferencedSchemas (_swSchema sw) <$> foo spec fetchRef mempty sw
+  -> IO (Either FilesystemFailure (ReferencedSchemas schema))
+referencesViaFilesystem' spec sw = catch (left FSParseFailure <$> f) handler
+  where
+    f :: IO (Either Text (ReferencedSchemas schema))
+    f = referencesMethodAgnostic readFile' spec sw
+
+    readFile' :: Text -> IO LBS.ByteString
+    readFile' = fmap LBS.fromStrict . (BS.readFile . T.unpack)
+
+    handler
+      :: IOError
+      -> IO (Either FilesystemFailure (ReferencedSchemas schema))
+    handler = pure . Left . ReadFailure
+
+--------------------------------------------------
+-- * Method Agnostic Fetching Tools
+--------------------------------------------------
 
 -- | A version of 'fetchReferencedSchema's where the function to fetch
 -- schemas is provided by the user. This allows restrictions to be added,
 -- e.g. rejecting non-local URIs.
-foo
+referencesMethodAgnostic
   :: forall schema. FromJSON schema
-  => Spec schema
-  -> (Text -> IO LBS.ByteString)
+  => (Text -> IO LBS.ByteString)
+  -> Spec schema
+  -> SchemaWithURI schema
+  -> IO (Either Text (ReferencedSchemas schema))
+referencesMethodAgnostic fetchRef spec sw =
+  (fmap.fmap) (ReferencedSchemas (_swSchema sw))
+              (foldFunction fetchRef spec mempty sw)
+
+foldFunction
+  :: forall schema. FromJSON schema
+  => (Text -> IO LBS.ByteString)
+  -> Spec schema
   -> URISchemaMap schema
   -> SchemaWithURI schema
-  -> IO (URISchemaMap schema)
-foo spec@(Spec embedded getId getRef) fetchRef referenced sw =
-  foldlM fetchRecursively referenced (includeSubschemas spec sw)
+  -> IO (Either Text (URISchemaMap schema))
+foldFunction fetchRef spec@(Spec _ getId getRef) referenced sw =
+  foldlM f (Right referenced) (includeSubschemas spec sw)
   where
-    fetchRecursively
-      :: URISchemaMap schema
+    f :: Either Text (URISchemaMap schema)
       -> SchemaWithURI schema
-      -> IO (URISchemaMap schema)
-    fetchRecursively g (SchemaWithURI schema mUri) = do
-      -- Resolving the new scope is necessary here because of situations
-      -- like this:
-      --
-      -- {
-      --     "id": "http://localhost:1234/",
-      --     "items": {
-      --         "id": "folder/",
-      --         "items": {"$ref": "folderInteger.json"}
-      --     }
-      -- }
-      let scope = newResolutionScope mUri (getId schema)
-      case resolveReference scope <$> getRef schema of
-        Just (Just uri,_) ->
-          if not (isRemoteReference uri) || H.member uri g
-            then pure g
-            else do
-              bts <- fetchRef uri
-              case eitherDecode bts of
-                Left e     -> ioError (userError e)
-                Right schm ->
-                  foo spec fetchRef (H.insert uri schm g)
-                      (SchemaWithURI schm (Just uri))
-        _ -> pure g
+      -> IO (Either Text (URISchemaMap schema))
+    f (Left e) _                            = pure (Left e)
+    f (Right g) (SchemaWithURI schema mUri) =
+      case newURI of
+        Nothing  -> pure (Right g)
+        Just uri -> do
+          bts <- fetchRef uri
+          case eitherDecode bts of
+            Left e     -> pure . Left . T.pack $ e
+            Right schm -> foldFunction fetchRef spec (H.insert uri schm g)
+                                       (SchemaWithURI schm (Just uri))
+      where
+        newURI :: Maybe Text
+        newURI = do
+          -- Resolving the new scope is necessary here because of situations
+          -- like this:
+          --
+          -- {
+          --     "id": "http://localhost:1234/",
+          --     "items": {
+          --         "id": "folder/",
+          --         "items": {"$ref": "folderInteger.json"}
+          --     }
+          -- }
+          let scope = newResolutionScope mUri (getId schema)
+          case resolveReference scope <$> getRef schema of
+            Just (Just uri,_) -> case H.lookup uri g of
+                                   Nothing -> Just uri
+                                   Just _  -> Nothing
+            _ -> Nothing
 
 -- | Return the schema passed in as an argument, as well as every
 -- subschema contained within it.

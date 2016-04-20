@@ -11,9 +11,10 @@ build-type:             Simple
 cabal-version:          >=1.10
 tested-with:            GHC == 7.8.4, GHC == 7.10.2
 extra-source-files:     changelog.txt
-                        draft4.json
                         JSON-Schema-Test-Suite/tests/draft4/*.json
                         README.md
+                        src/draft4.json
+                        tests/local.json
                         tests/Shared.hs
 
 library
