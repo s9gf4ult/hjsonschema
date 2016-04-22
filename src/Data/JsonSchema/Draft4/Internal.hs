@@ -19,7 +19,7 @@ import qualified Data.Validator.Draft4.Object   as OB
 import qualified Data.Validator.Draft4.String   as ST
 import           Data.Validator.Failure         (modFailure, setFailure)
 import qualified Data.Validator.Failure         as FR
-import           Data.Validator.Reference       (newResolutionScope)
+import           Data.Validator.Reference       (updateResolutionScope)
 import           Import
 
 -- For GHCs before 7.10:
@@ -134,7 +134,7 @@ validateAny referenced sw x = concat
                          x
       where
         scope :: Maybe Text
-        scope = newResolutionScope (_swURI sw) (_schemaId (_swSchema sw))
+        scope = updateResolutionScope (_swURI sw) (_schemaId (_swSchema sw))
 
         getReference :: Maybe Text -> Maybe Schema
         getReference Nothing  = Just (_rsStarting referenced)
@@ -267,7 +267,7 @@ descendNextLevel referenced (SchemaWithURI schema mUri) =
   validateAny referenced . flip SchemaWithURI scope
   where
     scope :: Maybe Text
-    scope = newResolutionScope mUri (_schemaId schema)
+    scope = updateResolutionScope mUri (_schemaId schema)
 
 runSingle
   :: Schema

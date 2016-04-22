@@ -8,7 +8,6 @@ import           Data.List              (isSuffixOf)
 import           Data.Monoid
 import           System.Directory       (getDirectoryContents)
 import           Test.Tasty             (defaultMain, testGroup)
-import qualified Test.Tasty.HUnit       as HU
 import           Test.Tasty.QuickCheck  (testProperty)
 
 import           Data.JsonSchema.Draft4

@@ -11,16 +11,16 @@ import           Import
 type URIBase = Maybe Text
 type URIBaseAndFragment = (Maybe Text, Maybe Text)
 
-newResolutionScope :: URIBase -> Maybe Text -> URIBase
-newResolutionScope mScope idKeyword
+updateResolutionScope :: URIBase -> Maybe Text -> URIBase
+updateResolutionScope mScope idKeyword
   | Just t <- idKeyword = fst . baseAndFragment $ resolveScopeAgainst mScope t
   | otherwise           = mScope
 
+referenceToScope :: Text -> Text
+referenceToScope = T.dropWhileEnd (/= '/')
+
 resolveReference :: URIBase -> Text -> URIBaseAndFragment
 resolveReference mScope t = baseAndFragment $ resolveScopeAgainst mScope t
-
-isRemoteReference :: Text -> Bool
-isRemoteReference = T.isInfixOf "://"
 
 resolveFragment
   :: (FromJSON schema, ToJSON schema, Show schema)
@@ -37,8 +37,11 @@ resolveFragment (Just pointer) schema = do
     Success schema' -> Just schema'
 
 --------------------------------------------------
--- * Internal
+-- * Helpers
 --------------------------------------------------
+
+isRemoteReference :: Text -> Bool
+isRemoteReference = T.isInfixOf "://"
 
 baseAndFragment :: Text -> URIBaseAndFragment
 baseAndFragment = f . T.splitOn "#"

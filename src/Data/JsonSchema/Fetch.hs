@@ -10,8 +10,9 @@ import qualified Data.HashMap.Strict      as H
 import qualified Data.Text                as T
 import           Network.HTTP.Client
 
-import           Data.Validator.Reference (newResolutionScope,
-                                           resolveReference)
+import           Data.Validator.Reference (referenceToScope,
+                                           resolveReference,
+                                           updateResolutionScope)
 import           Import
 
 -- For GHCs before 7.10:
@@ -131,7 +132,7 @@ foldFunction
   -> URISchemaMap schema
   -> SchemaWithURI schema
   -> IO (Either Text (URISchemaMap schema))
-foldFunction fetchRef spec@(Spec _ getId getRef) referenced sw =
+foldFunction fetchRef spec@(Spec _ _ getRef) referenced sw =
   foldlM f (Right referenced) (includeSubschemas spec sw)
   where
     f :: Either Text (URISchemaMap schema)
@@ -139,33 +140,23 @@ foldFunction fetchRef spec@(Spec _ getId getRef) referenced sw =
       -> IO (Either Text (URISchemaMap schema))
     f (Left e) _                            = pure (Left e)
     f (Right g) (SchemaWithURI schema mUri) =
-      case newURI of
+      case newRef of
         Nothing  -> pure (Right g)
         Just uri -> do
           bts <- fetchRef uri
           case eitherDecode bts of
             Left e     -> pure . Left . T.pack $ e
-            Right schm -> foldFunction fetchRef spec (H.insert uri schm g)
-                                       (SchemaWithURI schm (Just uri))
+            Right schm -> foldFunction
+                            fetchRef spec (H.insert uri schm g)
+                            (SchemaWithURI schm (Just (referenceToScope uri)))
       where
-        newURI :: Maybe Text
-        newURI = do
-          -- Resolving the new scope is necessary here because of situations
-          -- like this:
-          --
-          -- {
-          --     "id": "http://localhost:1234/",
-          --     "items": {
-          --         "id": "folder/",
-          --         "items": {"$ref": "folderInteger.json"}
-          --     }
-          -- }
-          let scope = newResolutionScope mUri (getId schema)
-          case resolveReference scope <$> getRef schema of
-            Just (Just uri,_) -> case H.lookup uri g of
-                                   Nothing -> Just uri
-                                   Just _  -> Nothing
-            _ -> Nothing
+        newRef :: Maybe Text
+        newRef
+          | Just (Just uri,_) <- resolveReference mUri <$> getRef schema
+            = case H.lookup uri g of
+                Nothing -> Just uri
+                Just _  -> Nothing
+          | otherwise = Nothing
 
 -- | Return the schema passed in as an argument, as well as every
 -- subschema contained within it.
@@ -179,5 +170,6 @@ includeSubschemas spec@(Spec embedded getId _) (SchemaWithURI schema mUri) =
   : (includeSubschemas spec =<< subSchemas)
   where
     subSchemas :: [SchemaWithURI schema]
-    subSchemas = flip SchemaWithURI (newResolutionScope mUri (getId schema))
-             <$> embedded schema
+    subSchemas =
+      (\a -> SchemaWithURI a (updateResolutionScope mUri (getId schema)))
+        <$> embedded schema
