@@ -38,6 +38,14 @@ resolveReferenceTests = do
     "case 1 result"
     (Just "/foo/bar", Nothing)
     (resolveReference (Just "/foo") "bar")
+  HU.assertEqual
+    "case 2 result"
+    (Nothing, Just "/bar")
+    (resolveReference Nothing "#/bar")
+  HU.assertEqual
+    "case 3 result"
+    (Just "/foo", Just "/bar")
+    (resolveReference (Just "/foo") "#/bar")
 
 referenceToScopeTests :: IO ()
 referenceToScopeTests = do
