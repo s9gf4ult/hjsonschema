@@ -1,10 +1,24 @@
 
 module Data.Validator.Reference where
 
+-- | Notes on how references are used:
+--
+--   * 'Data.JsonSchema.Fetch.includeSubschemas' uses 'updateResolutionScope'.
+--
+--   * 'Data.JsonSchema.Fetch.foldFunction' uses 'resolveReference' and
+--     'referenceToScope'.
+--
+--   * 'Data.JsonSchema.Draft4.Internal' uses 'updateResolutionScope'
+--     throughout.
+--
+--   * 'Data.Validator.Draft4.Any.ref' uses 'resolveReference' and
+--     'resolveFragment'.
+
 import qualified Data.Aeson.Pointer     as P
 import qualified Data.Text              as T
 import           Data.Text.Encoding
-import           Network.HTTP.Types.URI
+import           Network.HTTP.Types.URI (urlDecode)
+import           System.FilePath        ((</>), dropFileName)
 
 import           Import
 
@@ -17,7 +31,7 @@ updateResolutionScope mScope idKeyword
   | otherwise           = mScope
 
 referenceToScope :: Text -> Text
-referenceToScope = T.dropWhileEnd (/= '/')
+referenceToScope = T.pack . dropFileName . T.unpack
 
 resolveReference :: URIBase -> Text -> URIBaseAndFragment
 resolveReference mScope t = baseAndFragment $ resolveScopeAgainst mScope t
@@ -65,5 +79,10 @@ resolveScopeAgainst (Just scope) t
     -- to cut it off before appending.
     smartAppend :: Text
     smartAppend = case baseAndFragment scope of
-                    (Just base,_) -> base <> t
-                    _             -> t
+                    (Just base,_) ->
+                      case T.unpack t of
+                        -- We want "/foo" and "#/bar" to combine into
+                        -- "/foo#/bar" not "/foo/#/bar".
+                        '#':_ -> base <> t
+                        _     -> T.pack (T.unpack base </> T.unpack t)
+                    _ -> t

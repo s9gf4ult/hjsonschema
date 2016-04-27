@@ -13,6 +13,7 @@ import           Test.Tasty.QuickCheck  (testProperty)
 import           Data.JsonSchema.Draft4
 import           Local.Failure          (correctPaths)
 import           Local.Filesystem       (fetchFromFilesystem)
+import           Local.Reference        (referenceTests)
 import           Shared                 (isLocal, readSchemaTests, toTest)
 
 dir :: String
@@ -24,8 +25,9 @@ main = do
   ts <- readSchemaTests dir filenames
   defaultMain . testGroup "Tests not requiring an HTTP server" $
       testProperty "Invert schemas through JSON without change" invertSchema
-    : testGroup "Make paths to invalid data correctly" correctPaths
+    : testGroup "Report the path to invalid data correctly" correctPaths
     : testGroup "Test the referencesViaFilesystem function" fetchFromFilesystem
+    : testGroup "Test the Reference module" referenceTests
     : fmap toTest ts
 
 invertSchema :: Schema -> Bool

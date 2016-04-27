@@ -16,23 +16,11 @@ fetchFromFilesystem =
       readFileExceptions
 
   , HU.testCase
-      "Relative reference starting with ./"
-      (resolve "./tests/Local/schema.json")
-  , HU.testCase
-      "Relative reference"
+      "Relative reference to local file"
       (resolve "tests/Local/schema.json")
   , HU.testCase
-      "Chained relative references starting with ./"
-      (resolve "./tests/Local/schema-with-ref-1.json")
-  , HU.testCase
-      "Chained relative references where the second starts with ./"
-      (resolve "tests/Local/schema-with-ref-1.json")
-  , HU.testCase
-      "Chained relative references where the first starts with ./"
-      (resolve "./tests/Local/schema-with-ref-2.json")
-  , HU.testCase
-      "Chained relative references"
-      (resolve "tests/Local/schema-with-ref-2.json")
+      "Chained relative references to local files"
+      (resolve "./tests/Local/schema-with-ref.json")
   ]
 
 readFileExceptions :: IO ()
@@ -53,14 +41,12 @@ readFileExceptions = do
 
 resolve :: Text -> IO ()
 resolve ref = do
+  let schema = emptySchema { _schemaRef = Just ref }
   res <- fetchFilesystemAndValidate (SchemaWithURI schema Nothing) badData
   case res of
     Left (FVData [_]) -> pure ()
     a                 -> error (msg <> show a)
   where
-    schema :: Schema
-    schema = emptySchema { _schemaRef = Just ref }
-
     badData :: Value
     badData = toJSON [True, True]
 
