@@ -44,8 +44,8 @@ resolve ref = do
   let schema = emptySchema { _schemaRef = Just ref }
   res <- fetchFilesystemAndValidate (SchemaWithURI schema Nothing) badData
   case res of
-    Left (FVData [_]) -> pure ()
-    a                 -> error (msg <> show a)
+    Left (FVData _) -> pure ()
+    a               -> error (msg <> show a)
   where
     badData :: Value
     badData = toJSON [True, True]

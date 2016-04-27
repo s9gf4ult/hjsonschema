@@ -29,7 +29,7 @@ updateResolutionScopeTests = do
     (updateResolutionScope Nothing (Just "foo"))
   HU.assertEqual
     "case 4 result"
-    (Just "/foo/./bar")
+    (Just "/foo/./bar") -- TODO: Normalize after updateResolutionScope.
     (updateResolutionScope (Just "/foo") (Just "./bar"))
 
 resolveReferenceTests :: IO ()

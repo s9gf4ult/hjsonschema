@@ -4,10 +4,11 @@
 module Data.JsonSchema.Draft4
   ( Schema(..)
   , emptySchema
-  , checkSchema
 
     -- * One-step validation
-  , FilesystemValidateFailure(..)
+  , HTTPValidationFailure(..)
+  , fetchHTTPAndValidate
+  , FilesystemValidationFailure(..)
   , fetchFilesystemAndValidate
 
     -- * Fetching tools
@@ -23,9 +24,10 @@ module Data.JsonSchema.Draft4
   , ValidatorChain(..)
 
     -- * Other Draft 4 things exported just in case
-  , draft4Spec
+  , checkSchema
   , schemaValidity
   , IN.runValidate
+  , draft4Spec
   ) where
 
 import           Control.Arrow                   (left)
@@ -33,6 +35,8 @@ import           Data.Aeson
 import qualified Data.ByteString.Lazy            as LBS
 import           Data.FileEmbed
 import qualified Data.HashMap.Strict             as H
+import           Data.List.NonEmpty              (NonEmpty)
+import qualified Data.List.NonEmpty              as N
 import           Data.Maybe                      (fromMaybe)
 
 import           Data.JsonSchema.Draft4.Failure
@@ -44,38 +48,61 @@ import           Data.JsonSchema.Fetch           (FilesystemFailure(..),
                                                   SchemaWithURI(..))
 import qualified Data.JsonSchema.Fetch           as FE
 
-data FilesystemValidateFailure
+data HTTPValidationFailure
+  = HVRequest    HTTPFailure
+  | HVSchema     (NonEmpty Failure)
+  | HVData       (NonEmpty Failure)
+  deriving Show
+
+fetchHTTPAndValidate
+  :: SchemaWithURI Schema
+  -> Value
+  -> IO (Either HTTPValidationFailure ())
+fetchHTTPAndValidate sw v = do
+  res <- referencesViaHTTP sw
+  pure (g =<< f =<< left HVRequest res)
+  where
+    f :: ReferencedSchemas Schema
+      -> Either HTTPValidationFailure (Value -> [Failure])
+    f references = left HVSchema (checkSchema references sw)
+
+    g :: (Value -> [Failure]) -> Either HTTPValidationFailure ()
+    g validate = case N.nonEmpty (validate v) of
+                   Nothing       -> Right ()
+                   Just failures -> Left (HVData failures)
+
+data FilesystemValidationFailure
   = FVFilesystem FilesystemFailure
-  | FVSchema     [Failure]
-  | FVData       [Failure]
+  | FVSchema     (NonEmpty Failure)
+  | FVData       (NonEmpty Failure)
   deriving Show
 
 fetchFilesystemAndValidate
   :: SchemaWithURI Schema
   -> Value
-  -> IO (Either FilesystemValidateFailure ())
+  -> IO (Either FilesystemValidationFailure ())
 fetchFilesystemAndValidate sw v = do
   res <- referencesViaFilesystem sw
   pure (g =<< f =<< left FVFilesystem res)
   where
     f :: ReferencedSchemas Schema
-      -> Either FilesystemValidateFailure (Value -> [Failure])
+      -> Either FilesystemValidationFailure (Value -> [Failure])
     f references = left FVSchema (checkSchema references sw)
 
-    g :: (Value -> [Failure]) -> Either FilesystemValidateFailure ()
-    g validate = case validate v of
-                   []       -> Right ()
-                   failures -> Left (FVData failures)
+    g :: (Value -> [Failure]) -> Either FilesystemValidationFailure ()
+    g validate = case N.nonEmpty (validate v) of
+                   Nothing       -> Right ()
+                   Just failures -> Left (FVData failures)
 
 -- | Check the validity of a schema and return a function to validate data.
 checkSchema
   :: ReferencedSchemas Schema
   -> SchemaWithURI Schema
-  -> Either [Failure] (Value -> [Failure])
+  -> Either (NonEmpty Failure) (Value -> [Failure])
 checkSchema referenced schemaWithURI =
-  case schemaValidity (_swSchema schemaWithURI) of
-    []       -> Right (IN.runValidate referenced schemaWithURI)
-    failures -> Left failures
+  case N.nonEmpty . schemaValidity . _swSchema $ schemaWithURI of
+    Nothing       -> Right (IN.runValidate referenced schemaWithURI)
+    Just failures -> Left failures
 
 draft4Spec :: FE.Spec Schema
 draft4Spec = FE.Spec IN.embedded _schemaId _schemaRef
