@@ -10,8 +10,7 @@ import qualified Data.HashMap.Strict      as H
 import qualified Data.Text                as T
 import           Network.HTTP.Client
 
-import           Data.Validator.Reference (referenceToScope,
-                                           resolveReference,
+import           Data.Validator.Reference (resolveReference,
                                            updateResolutionScope)
 import           Import
 
@@ -146,9 +145,8 @@ foldFunction fetchRef spec@(Spec _ _ getRef) referenced sw =
           bts <- fetchRef uri
           case eitherDecode bts of
             Left e     -> pure . Left . T.pack $ e
-            Right schm -> foldFunction
-                            fetchRef spec (H.insert uri schm g)
-                            (SchemaWithURI schm (Just (referenceToScope uri)))
+            Right schm -> foldFunction fetchRef spec (H.insert uri schm g)
+                                       (SchemaWithURI schm (Just uri))
       where
         newRef :: Maybe Text
         newRef

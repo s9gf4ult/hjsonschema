@@ -1,12 +1,17 @@
 
 module Data.Validator.Reference where
 
--- | Notes on how references are used:
+-- | JSON Reference is described here:
+-- <http://tools.ietf.org/html/draft-pbryan-zyp-json-ref-03>
+--
+-- And is extended for JSON Schema here:
+-- <http://json-schema.org/latest/json-schema-core.html#anchor26>
+--
+-- Notes on where these functions are used:
 --
 --   * 'Data.JsonSchema.Fetch.includeSubschemas' uses 'updateResolutionScope'.
 --
---   * 'Data.JsonSchema.Fetch.foldFunction' uses 'resolveReference' and
---     'referenceToScope'.
+--   * 'Data.JsonSchema.Fetch.foldFunction' uses 'resolveReference'.
 --
 --   * 'Data.JsonSchema.Draft4.Internal' uses 'updateResolutionScope'
 --     throughout.
@@ -29,9 +34,6 @@ updateResolutionScope :: URIBase -> Maybe Text -> URIBase
 updateResolutionScope mScope idKeyword
   | Just t <- idKeyword = fst . baseAndFragment $ resolveScopeAgainst mScope t
   | otherwise           = mScope
-
-referenceToScope :: Text -> Text
-referenceToScope = T.pack . dropFileName . T.unpack
 
 resolveReference :: URIBase -> Text -> URIBaseAndFragment
 resolveReference mScope t = baseAndFragment $ resolveScopeAgainst mScope t
@@ -78,11 +80,12 @@ resolveScopeAgainst (Just scope) t
     -- but just in case a user leaves one in we want to be sure
     -- to cut it off before appending.
     smartAppend :: Text
-    smartAppend = case baseAndFragment scope of
-                    (Just base,_) ->
-                      case T.unpack t of
-                        -- We want "/foo" and "#/bar" to combine into
-                        -- "/foo#/bar" not "/foo/#/bar".
-                        '#':_ -> base <> t
-                        _     -> T.pack (T.unpack base </> T.unpack t)
-                    _ -> t
+    smartAppend =
+      case baseAndFragment scope of
+        (Just base,_) ->
+          case T.unpack t of
+            -- We want "/foo" and "#/bar" to combine into
+            -- "/foo#/bar" not "/foo/#/bar".
+            '#':_ -> base <> t
+            _     -> T.pack (dropFileName (T.unpack base) </> T.unpack t)
+        _ -> t
