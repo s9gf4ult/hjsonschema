@@ -1,3 +1,11 @@
+# 0.10
+
++ Rewrite fetching internals.
++ Fix reference resolution defects, add more tests.
++ Add one-step validation functions ('fetchFilesystemAndValidate' and 'fetchHTTPAndValidate').
++ Alias the validation failure type exported by 'Data.JsonSchema.Draft4' to
+'Invalid', change its field names.
+
 # 0.9
 
 + Partial rewrite. The API of the library has changed, see the examples
