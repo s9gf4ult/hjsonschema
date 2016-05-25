@@ -144,7 +144,7 @@ foldFunction fetchRef spec@(Spec _ _ getRef) referenced sw =
         Just uri -> do
           bts <- fetchRef uri
           case eitherDecode bts of
-            Left e     -> pure . Left . T.pack $ e
+            Left e     -> pure . Left . T.pack $ "While parsing " ++ T.unpack uri ++ ": " ++ e
             Right schm -> foldFunction fetchRef spec (H.insert uri schm g)
                                        (SchemaWithURI schm (Just uri))
       where

@@ -35,5 +35,5 @@ example = do
     Left (D4.FVSchema _) -> error "Our 'schema' itself was invalid."
     Left (D4.FVData failures) ->
       case NE.toList failures of
-        [D4.Invalid (D4.Ref D4.UniqueItems) _ _] -> return () -- Success.
-        _ -> error "Got more invalidation reasons than we expected."
+        [D4.Invalid (D4.Ref _ D4.UniqueItems) _ _] -> return () -- Success.
+        x -> error $ "Got more invalidation reasons than we expected." ++ show x

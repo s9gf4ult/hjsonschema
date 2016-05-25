@@ -30,5 +30,5 @@ example = do
                        Right f -> f
       case validate badData of
         [] -> error "We validated bad data."
-        [D4.Invalid (D4.Ref D4.UniqueItems) _ _] -> return () -- Success.
+        [D4.Invalid (D4.Ref _ D4.UniqueItems) _ _] -> return () -- Success.
         e -> error "We got a different failure than expected."

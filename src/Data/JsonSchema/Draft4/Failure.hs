@@ -1,6 +1,7 @@
 
 module Data.JsonSchema.Draft4.Failure where
 
+import           Data.Text (Text)
 import qualified Data.Validator.Failure as FR
 
 type Invalid = FR.Failure ValidatorChain
@@ -43,7 +44,7 @@ data ValidatorChain
     -- Also note that ideally we would enforce in the type system that any
     -- failing references be dealt with before valididation. Then this could
     -- be removed entirely.
-  | Ref ValidatorChain
+  | Ref Text ValidatorChain
   | Enum
   | TypeValidator
   | AllOf ValidatorChain

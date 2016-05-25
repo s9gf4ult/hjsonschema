@@ -113,7 +113,7 @@ runValidate referenced sw x = concat
         Nothing        -> mempty
         Just reference ->
           maybe [FR.Invalid RefResolution (toJSON reference) mempty]
-                (fmap (modFailure Ref))
+                (fmap (modFailure (Ref reference)))
                 $ AN.ref scope
                          getReference
                          (\a b -> runValidate referenced (SchemaWithURI b a))
